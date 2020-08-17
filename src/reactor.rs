@@ -1,10 +1,6 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::mem;
-#[cfg(unix)]
-use std::os::unix::io::RawFd;
-#[cfg(windows)]
-use std::os::windows::io::RawSocket;
 use std::panic;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -17,6 +13,8 @@ use futures_lite::*;
 use once_cell::sync::Lazy;
 use polling::{Event, Poller};
 use vec_arena::Arena;
+
+use crate::sys::*;
 
 /// The reactor.
 ///
@@ -148,8 +146,7 @@ impl Reactor {
     /// Registers an I/O source in the reactor.
     pub(crate) fn insert_io(
         &self,
-        #[cfg(unix)] raw: RawFd,
-        #[cfg(windows)] raw: RawSocket,
+        raw: RawSource,
     ) -> io::Result<Arc<Source>> {
         // Register the file descriptor.
         self.poller.insert(raw)?;
@@ -402,13 +399,8 @@ enum TimerOp {
 /// A registered source of I/O events.
 #[derive(Debug)]
 pub(crate) struct Source {
-    /// Raw file descriptor on Unix platforms.
-    #[cfg(unix)]
-    pub(crate) raw: RawFd,
-
-    /// Raw socket handle on Windows.
-    #[cfg(windows)]
-    pub(crate) raw: RawSocket,
+    /// Raw file descriptor (on Unix platforms) or socket handle (on Windows).
+    pub(crate) raw: RawSource,
 
     /// The key of this source obtained during registration.
     key: usize,
