@@ -1,6 +1,7 @@
 //! Cross-platform type and trait aliases.
 
 pub(crate) use self::sys::*;
+use std::io;
 
 /// Cross-platform alias to `AsRawFd` (Unix) or `AsRawSocket` (Windows).
 ///
@@ -36,12 +37,32 @@ mod sys {
       Self::from_raw_fd(h)
     }
   }
+
+  /// Calls a libc function and results in `io::Result`.
+  macro_rules! syscall {
+      ($fn:ident $args:tt) => {{
+          let res = unsafe { libc::$fn $args };
+          if res == -1 {
+              Err(std::io::Error::last_os_error())
+          } else {
+              Ok(res)
+          }
+      }};
+  }
+
+  pub fn set_non_blocking(fd: RawSource) -> io::Result<()> {
+    // Put the file descriptor in non-blocking mode.
+    let flags = syscall!(fcntl(fd, libc::F_GETFL))?;
+    syscall!(fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK))?;
+    Ok(())
+  }
 }
 
 #[cfg(windows)]
 mod sys {
   use super::*;
   use std::os::windows::io::{AsRawSocket, FromRawSocket, RawSocket};
+  use winapi::um::winsock2;
 
   pub(crate) type RawSource = RawSocket;
 
@@ -55,5 +76,21 @@ mod sys {
     unsafe fn from_raw_source(h: RawSource) -> Self {
       Self::from_raw_socket(h)
     }
+  }
+
+  pub fn set_non_blocking(sock: RawSource) -> io::Result<()> {
+    unsafe {
+      let mut nonblocking = true as libc::c_ulong;
+      let res = winsock2::ioctlsocket(
+        sock as winsock2::SOCKET,
+        winsock2::FIONBIO,
+        &mut nonblocking,
+      );
+      if res != 0 {
+        return Err(io::Error::last_os_error());
+      }
+    }
+
+    Ok(())
   }
 }

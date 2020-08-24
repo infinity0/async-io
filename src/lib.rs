@@ -84,6 +84,7 @@ use crate::reactor::{Reactor, Source};
 
 pub(crate) mod sys;
 pub mod parking;
+pub mod limit;
 mod reactor;
 
 /// A future that expires at a point in time.
